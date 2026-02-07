@@ -46,3 +46,10 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code temporary files
+tmpclaud*
+.claude*
+*.tmp
+.temp/
+temp/
