@@ -40,12 +40,34 @@ RC_TOPICS = [
     "Intellectual history"
 ]
 
-# Difficulty level
-DIFFICULTY_LEVEL = "GMAT 700+ / CAT advanced"
+# Difficulty levels
+DIFFICULTY_LEVELS = {
+    "gmat": {
+        "name": "GMAT 700+",
+        "word_range": (420, 520),
+        "description": "Ultra-dense abstract prose with complex nested sentences"
+    },
+    "cat": {
+        "name": "CAT Advanced",
+        "word_range": (380, 480),
+        "description": "Dense academic content with implicit author stance"
+    },
+    "sbi": {
+        "name": "SBI/IBPS PO",
+        "word_range": (250, 350),
+        "description": "Moderate difficulty with clear structure and business/HR topics"
+    }
+}
+
+# Default difficulty
+DEFAULT_DIFFICULTY = "gmat"
 
 # Scheduling
 DAILY_SEND_TIME = "08:00"  # 8 AM in the user's timezone (HH:MM format in UTC)
 TIMEZONE = "UTC"
+
+# Admin access
+ADMIN_USER_IDS = list(map(int, os.getenv("ADMIN_USER_IDS", "").split(","))) if os.getenv("ADMIN_USER_IDS") else []
 
 # Logging
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"

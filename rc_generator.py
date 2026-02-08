@@ -8,7 +8,7 @@ import os
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from openai import OpenAI
-from config import HF_API_TOKEN, HF_MODEL, RC_TOPICS, RC_PASSGE_WORD_COUNT, RC_NUM_QUESTIONS
+from config import HF_API_TOKEN, HF_MODEL, RC_TOPICS, RC_PASSGE_WORD_COUNT, RC_NUM_QUESTIONS, DIFFICULTY_LEVELS, DEFAULT_DIFFICULTY
 
 
 class RCGenerator:
@@ -37,14 +37,20 @@ class RCGenerator:
             self.client = None
             print("[INFO] No HuggingFace token configured. Using fallback passages.")
 
-    def generate_daily_rc(self) -> Dict:
+    def generate_daily_rc(self, difficulty: str = None) -> Dict:
         """
         Generate complete RC for the day:
-        - 1 passage (420-520 words)
+        - 1 passage (420-520 words depending on difficulty)
         - 4 questions with options and answers
         """
+        if difficulty is None:
+            difficulty = DEFAULT_DIFFICULTY
+
+        if difficulty not in DIFFICULTY_LEVELS:
+            difficulty = DEFAULT_DIFFICULTY
+
         topic = random.choice(RC_TOPICS)
-        passage = self._generate_passage(topic)
+        passage = self._generate_passage(topic, difficulty)
         questions = self._generate_questions(passage)
 
         rc_data = {
@@ -52,27 +58,31 @@ class RCGenerator:
             "topic": topic,
             "passage": passage,
             "questions": questions,
-            "difficulty": "GMAT 700+ / CAT Advanced"
+            "difficulty": difficulty,
+            "difficulty_name": DIFFICULTY_LEVELS[difficulty]["name"]
         }
 
         return rc_data
 
-    def _generate_passage(self, topic: str) -> str:
+    def _generate_passage(self, topic: str, difficulty: str = None) -> str:
         """Generate a single passage on the given topic."""
+        if difficulty is None:
+            difficulty = DEFAULT_DIFFICULTY
+
         passage = None
 
         # Try API first if available
         if self.use_api and self.client:
-            prompt = self._build_passage_prompt(topic)
+            prompt = self._build_passage_prompt(topic, difficulty)
             passage = self._call_hf_api(prompt)
 
         # If API failed or not available, use fallback
         if not passage:
-            passage = self._fallback_passage_generator(topic)
+            passage = self._fallback_passage_generator(topic, difficulty)
 
         # Validate and adjust word count
         word_count = len(passage.split())
-        min_words, max_words = RC_PASSGE_WORD_COUNT
+        min_words, max_words = DIFFICULTY_LEVELS[difficulty]["word_range"]
 
         # If too long, truncate at sentence boundary
         if word_count > max_words:
@@ -83,7 +93,7 @@ class RCGenerator:
         word_count = len(passage.split())
         if word_count < min_words:
             print(f"[WARN] Passage {word_count} words, using fallback")
-            passage = self._fallback_passage_generator(topic)
+            passage = self._fallback_passage_generator(topic, difficulty)
 
         return passage.strip()
 
@@ -108,14 +118,20 @@ class RCGenerator:
         # If no sentence boundary found, return as-is
         return truncated
 
-    def _build_passage_prompt(self, topic: str) -> str:
-        """Build prompt for passage generation - CAT 2024 + GMAT 700+."""
-        return f"""You are a CAT 2024 RC expert and GMAT 700+ instructor. Generate an extremely challenging reading comprehension passage.
+    def _build_passage_prompt(self, topic: str, difficulty: str = None) -> str:
+        """Build prompt for passage generation based on difficulty level."""
+        if difficulty is None:
+            difficulty = DEFAULT_DIFFICULTY
+
+        limit = DIFFICULTY_LEVELS[difficulty]["word_range"]
+
+        if difficulty == "gmat":
+            return f"""You are a CAT 2024 RC expert and GMAT 700+ instructor. Generate an extremely challenging reading comprehension passage.
 
 TOPIC: {topic}
 
 STRICT REQUIREMENTS:
-1. EXACTLY 420-520 words. Count every word.
+1. EXACTLY {limit[0]}-{limit[1]} words. Count every word.
 2. STYLE:
    - Ultra-dense abstract prose with complex nested sentences
    - 15-25 words per sentence minimum
@@ -140,7 +156,59 @@ FORBIDDEN:
    - NO narrative elements
    - NO obvious sentence meanings
 
-GENERATE PASSAGE (exactly 420-520 words):
+GENERATE PASSAGE (exactly {limit[0]}-{limit[1]} words):
+"""
+        elif difficulty == "cat":
+            return f"""You are a CAT RC expert. Generate a challenging reading comprehension passage for CAT Level.
+
+TOPIC: {topic}
+
+STRICT REQUIREMENTS:
+1. EXACTLY {limit[0]}-{limit[1]} words
+2. STYLE:
+   - Dense academic prose with complex ideas
+   - 12-18 words per sentence average
+   - Formal tone with clear structure
+   - Author's perspective somewhat implicit
+   - Logical flow with inference opportunities
+3. CONTENT:
+   - Strong theoretical arguments
+   - Multiple perspectives presented
+   - Room for inference-based comprehension
+   - Appropriate vocabulary level
+4. STRUCTURE:
+   - Para 1: Problem or central idea
+   - Para 2: Supporting perspective or counterargument
+   - Para 3: Analysis and implications
+   - Para 4: Conclusions or author position
+
+GENERATE PASSAGE (exactly {limit[0]}-{limit[1]} words):
+"""
+        else:  # SBI/IBPS PO
+            return f"""You are a banking/HR expert for SBI/IBPS PO exams. Generate an easy-to-moderate reading comprehension passage.
+
+TOPIC: {topic} (business, HR, management, economics, or general knowledge)
+
+STRICT REQUIREMENTS:
+1. EXACTLY {limit[0]}-{limit[1]} words
+2. STYLE:
+   - Clear, well-structured prose
+   - 10-15 words per sentence average
+   - Professional tone with definite meaning
+   - Author's position clear and explicit
+   - Logical transitions between sentences
+3. CONTENT:
+   - Practical business or HR concepts
+   - Clear examples or case studies
+   - Direct and understandable arguments
+   - Business/organizational focus
+4. STRUCTURE:
+   - Para 1: Clear introduction of topic
+   - Para 2: Explanation and examples
+   - Para 3: Benefits or implications
+   - Para 4: Conclusion or action items
+
+GENERATE PASSAGE (exactly {limit[0]}-{limit[1]} words):
 """
 
     def _call_hf_api(self, prompt: str) -> Optional[str]:
@@ -179,12 +247,16 @@ GENERATE PASSAGE (exactly 420-520 words):
             print(f"[ERROR] HF API failed: {error_msg}")
             return None
 
-    def _fallback_passage_generator(self, topic: str) -> str:
+    def _fallback_passage_generator(self, topic: str, difficulty: str = None) -> str:
         """
         Fallback passage generator with high-quality pre-crafted passages.
-        All passages are 420-520 words.
+        Returns passages appropriate to difficulty level.
         """
-        passages_db = {
+        if difficulty is None:
+            difficulty = DEFAULT_DIFFICULTY
+
+        # GMAT level passages (existing ones)
+        gmat_passages = {
             "Philosophy": "The nature of consciousness remains one of philosophy's most intractable puzzles. While neuroscience has made considerable advances in mapping brain correlates of subjective experience, the explanatory gap between physical processes and phenomenal awareness persists. This gap highlights what philosophers term the hard problem of consciousness, the question of why and how physical processes give rise to subjective experience rather than occurring in the dark. The more straightforward easy problems of explaining cognitive functions have yielded to scientific investigation, yet consciousness itself seems to resist such reductionist approaches. Some contemporary philosophers argue that this resistance reflects a fundamental limitation in our current methodological frameworks rather than metaphysical mystery. They contend that subjective experience emerges from information integration across neural systems in ways our present vocabulary cannot adequately capture. Others maintain that consciousness genuinely transcends physicalist explanation, pointing to the seemingly unbridgeable qualitative nature of experience. The dispute between these positions hinges partly on empirical claims about neural organization but also on deeper commitments about what kinds of explanation are ultimately satisfying. What remains undisputed is that consciousness presents unique explanatory challenges. The first-person perspective from which consciousness is known cannot be exhausted by third-person scientific description. This asymmetry suggests that future progress requires not merely increased neurological sophistication but perhaps reconceptualization of what we mean by explanation itself. The puzzle endures not because neuroscience has failed but because consciousness occupies an unusual epistemic position, being simultaneously the most intimately known aspect of our experience and the least amenable to objective verification. Some philosophers now suggest that the dichotomy between subjective and objective knowledge itself requires rethinking. The history of consciousness studies demonstrates repeatedly that progress depends less on empirical discovery than on conceptual innovation. Different theoretical frameworks generate different puzzles and apparently different solutions. Recent work in neurophenomenology attempts to bridge first-person and third-person perspectives through systematic analysis of conscious experience itself. Yet fundamental questions persist about whether such bridging is genuinely possible or merely postpones deeper conceptual tensions.",
 
             "Political theory": "Liberal democracy rests upon an assumption increasingly questioned by contemporary political theorists: that rational deliberation among equal citizens can produce legitimate collective decisions. This assumption presumes a degree of popular understanding, engagement, and mutual respect that empirical reality seems to contradict. Mass democratic electorates routinely demonstrate preference aggregation mechanisms that bear little resemblance to ideals of reasoned discourse. Yet the alternative, restricting political participation to informed elites, carries its own epistemic and moral costs. Recent scholarship suggests the paradox may be less about democracy's failure than about our misplaced expectations. Democratic procedures do not eliminate conflict or produce perfect justice. Rather, they institutionalize contestation in ways that prevent any single group from monopolizing power indefinitely. This procedural legitimacy, distinct from outcomes-based legitimacy, requires neither universal truth-seeking nor perfect rationality. Instead, it depends on citizens accepting that they may lose current battles while retaining genuine opportunity to win future ones. This acceptance becomes fragile when institutional mechanisms begin systematically favoring particular interests. The crisis of contemporary liberal democracy may thus reflect not the inherent limitations of democratic procedure but the breakdown of conditions sustaining procedural legitimacy. When electoral systems become responsive primarily to wealthy interests, when media fragmentation prevents shared deliberative space, when institutions appear incapable of addressing urgent problems, citizens rationally lose faith in procedural fairness. Reform proposals typically point toward either expanding democratic participation or improving deliberative quality. Yet these solutions often miss deeper structural issues. Material conditions enabling procedural agreement have deteriorated precisely as formal democratic institutions have expanded. The relationship between institutional form and underlying social trust proves more complicated than theories of deliberative democracy suggest. Genuine procedural legitimacy may depend less on improving argumentation than on reconstructing conditions making reasonable disagreement tolerable. This interpretation suggests solutions require not returning to impossible ideals of rational consensus but rebuilding material conditions enabling meaningful participation.",
@@ -198,10 +270,40 @@ GENERATE PASSAGE (exactly 420-520 words):
             "History of ideas": "The concept of progress, the belief that human knowledge and material conditions necessarily improve across historical time, came to dominance recently, achieving near-universal nineteenth-century acceptance. Earlier civilizations operated under different temporal frameworks: cyclical views imagining eternal recurrence, decline narratives tracing fall from ancient wisdom, providential models seeing time as divine instrument. The shift toward linear progress narratives coincided with unprecedented technological transformation and European global dominance, making causation difficult to untangle. Did progress beliefs drive technological advancement, or did technological success generate progress narratives justifying it retrospectively? The answer matters because progress frameworks now structure not merely historical interpretation but policy deliberation and individual aspiration. We evaluate institutions by trajectory. Societies must advance or face irrelevance. This progressive teleology carries hidden costs alongside obvious benefits. It generates impatience with untransformed institutions, leading to destructive intervention in systems requiring gradual development. It produces alienation when actual change disappoints progress expectations. Most significantly, progress narratives obscure genuine historical contingency. Our current arrangements represent particular choices rather than inevitable rational potential unfolding. Recovering contingency requires neither rejecting improvement nor halting beneficial change but developing critical distance from progress frameworks, recognizing them as historically particular rather than universal truths. The challenge lies maintaining capacity for practical improvement while acknowledging constructed historical nature.",
         }
 
-        # Return matching topic or random
-        if topic in passages_db:
-            return passages_db[topic]
-        return passages_db["Philosophy"]
+        # CAT level passages (slightly simpler)
+        cat_passages = {
+            "Philosophy": "The debate surrounding artificial intelligence centers on whether machines can genuinely understand language or merely process patterns. Critics argue that without consciousness or lived experience, AI systems cannot achieve true comprehension. Proponents counter that human understanding itself may be sophisticated pattern recognition. This dispute reflects deeper questions about the nature of cognition. Traditional philosophy viewed understanding as involving abstract concepts and intentionality. Neuroscience increasingly reveals cognition depends on embodied experience and sensorimotor interaction with the world. If understanding requires such embodiment, AI systems may never truly understand despite computational sophistication. Alternatively, if cognition is fundamentally about information processing, differences between biological and artificial systems may be less profound. Recent work bridges these perspectives, suggesting understanding operates at multiple levels. Low-level understanding involves semantic processing and pattern extraction. High-level understanding connects information to broader conceptual frameworks and goals. Advanced AI systems demonstrate some low-level understanding capabilities. Whether they can achieve higher-level understanding remains uncertain. This question matters for how we design AI systems and evaluate their abilities.",
+
+            "Business Management": "Effective leadership combines vision with practical execution. Many organizations struggle balancing long-term strategic goals with immediate operational demands. Leaders must maintain focus on core objectives while remaining flexible about implementation methods. Studies show that successful leaders establish clear communication channels with their teams. They articulate the organization's mission in ways that resonate with employees at all levels. This alignment creates shared purpose and improves decision-making throughout the organization. Leaders also recognize that different situations require different leadership styles. Autocratic approaches work during crises requiring quick decisions. Collaborative styles prove more effective for knowledge work and innovation. Successful leaders adjust their approach based on organizational context and team needs. The challenge lies recognizing when to employ each style. This requires emotional intelligence and genuine understanding of team dynamics.",
+
+            "Economics": "Globalization has fundamentally altered economic structures and labor markets. Manufacturing in developed nations has declined as production moved to lower-cost countries. Service sectors and technology industries have expanded to fill gaps. This transition created both opportunities and disruptions. Workers with skills relevant to new industries prospered. Those dependent on traditional manufacturing faced unemployment and reduced social mobility. Policy responses have focused on retraining programs and social safety nets. Yet evidence suggests significant adjustment costs occur before workers transition to new sectors. The debate centers on whether globalization benefits outweigh adjustment costs. Economic data shows aggregate benefits but unequal distribution. This inequality generates political tension and questions about trade policy sustainability.",
+
+            "General Knowledge": "The human brain contains approximately eighty-six billion neurons, each forming thousands of connections with other neurons. These connections enable learning and memory formation. When we learn something new, the connections between neurons strengthen through repeated activation. This process called neuroplasticity allows our brains to reorganize and form new neural pathways. Understanding neuroplasticity has profound implications for education and rehabilitation. It demonstrates that intelligence is not fixed at birth but develops throughout life. People can overcome brain injuries and learn new skills at any age. This understanding encourages lifelong learning and supports individuals recovering from neurological damage. Brain imaging studies reveal specific neural patterns associated with learning, memory, and emotional processing.",
+        }
+
+        # SBI/IBPS PO level passages (easier, business/HR focused)
+        sbi_passages = {
+            "Human Resources": "Organizational culture significantly impacts employee performance and retention. Companies with strong, positive cultures experience lower turnover and higher productivity. Culture is shaped by organizational values, leadership behavior, and work environment. When leaders consistently demonstrate core values, employees internalize those values. This creates alignment between individual and organizational goals. Research shows that employees feeling valued and respected perform better than those feeling underappreciated. Companies investing in employee development report improved engagement and loyalty. Regular feedback, training opportunities, and career development paths make employees feel their growth matters. Organizations should assess their culture regularly through employee surveys and focus groups. Understanding how employees perceive the organization helps leaders identify gaps and make improvements.",
+
+            "Business Strategy": "Digital transformation has become essential for modern businesses across all industries. Companies adopting digital technologies improve efficiency and reach new customers. Digital tools enable better data collection and analysis for informed decision-making. E-commerce platforms allow businesses to operate twenty-four hours daily without physical limitations. Social media provides cost-effective marketing channels to target specific audiences. Mobile applications enhance customer engagement and loyalty. However, successful digital transformation requires more than just adopting new technologies. Employees need training to use new systems effectively. Organizational processes must adapt to support digital workflows. Companies should develop comprehensive digital strategies aligned with business objectives rather than adopting technology for its own sake.",
+
+            "Economics": "Economic growth measures a nation's increasing productivity and wealth creation. Several factors contribute to economic growth including technological innovation, capital investment, and workforce development. Countries with strong education systems typically achieve higher growth rates. Technology improvements increase productivity, allowing workers to produce more with same effort. Capital investment in infrastructure and equipment enables business expansion. International trade allows countries to specialize in areas where they have competitive advantages. Government policies supporting business and innovation encourage economic growth. Stable political systems and predictable regulations attract business investment. Countries must balance growth with sustainable practices to ensure long-term prosperity.",
+
+            "Workplace Practices": "Effective meetings save time and improve decisions when conducted well. Many organizations waste resources on unproductive meetings lacking clear objectives. Successful meetings start with defined agendas shared before the meeting begins. Participants understand what decisions need making or information needs sharing. Clear time limits keep meetings focused and productive. Leaders should encourage participation from all attendees, not just senior members. Diverse perspectives improve decision quality and increase team buy-in. Follow-up actions should be documented with assigned owners and deadlines. Poor follow-up undermines meeting effectiveness. Regular check-ins ensure action items are completed as promised. Organizations reducing meetings to only necessary ones report improved productivity and employee satisfaction.",
+        }
+
+        # Select passages based on difficulty
+        if difficulty == "gmat":
+            passages = gmat_passages
+        elif difficulty == "cat":
+            passages = cat_passages
+        else:  # sbi
+            passages = sbi_passages
+
+        # Return matching topic or random from difficulty level
+        if topic in passages:
+            return passages[topic]
+        return list(passages.values())[0]
 
     def _generate_questions(self, passage: str) -> List[Dict]:
         """Generate 4 questions from the passage."""
@@ -300,8 +402,9 @@ GENERATE PASSAGE (exactly 420-520 words):
     def validate_rc(self, rc_data: Dict) -> Tuple[bool, str]:
         """Validate RC quality before sending."""
         passage = rc_data["passage"]
+        difficulty = rc_data.get("difficulty", DEFAULT_DIFFICULTY)
         word_count = len(passage.split())
-        min_words, max_words = RC_PASSGE_WORD_COUNT
+        min_words, max_words = DIFFICULTY_LEVELS.get(difficulty, DIFFICULTY_LEVELS[DEFAULT_DIFFICULTY])["word_range"]
 
         if not (min_words <= word_count <= max_words):
             return False, f"Word count {word_count} outside range {min_words}-{max_words}"

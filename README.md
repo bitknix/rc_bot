@@ -1,38 +1,69 @@
-# 📚 GMAT/CAT 700+ RC Bot - Daily Reading Comprehension Practice
+# 📚 GMAT/CAT/SBI-IBPS RC Bot - Daily Reading Comprehension Practice
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Telegram](https://img.shields.io/badge/Telegram-Active-blue.svg)](https://telegram.org/)
 
-A sophisticated Telegram bot that delivers **daily GMAT 700+ level Reading Comprehension practice** with AI-generated or curated passages, inference-heavy questions, and detailed explanations.
+A sophisticated Telegram bot that delivers **daily reading comprehension practice with multiple difficulty levels** (GMAT 700+, CAT Advanced, SBI/IBPS PO) featuring AI-generated or curated passages, inference-heavy questions, detailed explanations, user analytics, streak tracking, and quiz mode.
 
 ## ✨ Features
 
-- **Daily RC Challenge**: One challenging passage per day (420-520 words)
+- **🔥 Multiple Difficulty Levels**:
+  - **GMAT 700+**: Ultra-dense abstract prose with implicit author stance (420-520 words)
+  - **CAT Advanced**: Dense academic content with moderate complexity (380-480 words)
+  - **SBI/IBPS PO**: Clear business/HR focused passages (250-350 words)
+
+- **📚 Daily Practice**: One challenging passage per day at your chosen level
 - **4 Expert Questions**: Primary purpose, inference, tone/attitude, logical implication
-- **GMAT/CAT Quality**: Abstract, dense academic prose requiring deep reading
 - **Detailed Explanations**: Why each answer works and why others fail
+- **🎯 Quiz Mode**: Practice 3 passages in one session
+- **🔥 Streak Tracking**: Track your daily practice streak
+- **📊 Personal Stats**: View your progress (total RCs, favorite difficulty level, days active)
+- **👥 Admin Analytics Dashboard**: View overall user engagement metrics
 - **Rotating Topics**: Philosophy, Economics, Politics, Cognitive Science, Sociology, History
 - **Live AI Generation**: Uses HuggingFace OpenAI API (or pre-crafted fallback)
 - **No Cost**: Completely free using HuggingFace free tier
 - **Easy Deployment**: GitHub Actions for scheduling, Railway/Render for hosting
 
-## 🎯 Difficulty Level
+## 🎯 Difficulty Levels
 
-**Comparable to:**
-- GMAT RC section (650-700)
-- CAT advanced tier
-- SBI PO difficult questions
+### 🔥 GMAT 700+ (Hardest)
+- Ultra-dense abstract prose with complex nested sentences
+- 420-520 word passages
+- Implicit author stance and ambiguous transitions
+- Requires deep logical inference
+- Best for: GMAT preparation, advanced learners
 
-**Features:**
-- Implicit author stance (no explicit opinions)
-- Multiple seemingly-correct options
-- Requires logical inference
-- Questions test deep comprehension, not surface facts
+### 🟡 CAT Advanced (Medium)
+- Dense academic content with complex ideas
+- 380-480 word passages
+- Somewhat implicit author perspective
+- Balanced comprehension and inference
+- Best for: CAT preparation, intermediate learners
+
+### 🟢 SBI/IBPS PO (Easiest)
+- Clear, well-structured prose with explicit meaning
+- 250-350 word passages
+- Business/HR/management focused topics
+- Practical concepts with clear examples
+- Best for: Banking exams, beginners, quick practice
+
+## 📱 Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message and feature overview |
+| `/today` | Get today's RC passage at your selected difficulty |
+| `/answer` | View answers with detailed explanations |
+| `/difficulty` | Choose your difficulty level (GMAT/CAT/SBI-IBPS) |
+| `/quiz` | Practice 3 passages in one session |
+| `/streak` | View your practice streak and total RCs |
+| `/mystats` | Personal statistics (total RCs, days active, difficulty preferences) |
+| `/adminstats` | **[ADMIN ONLY]** View overall analytics dashboard |
+| `/feedback` | Send feedback to improve the bot |
+| `/help` | Show all available commands |
 
 ## 🚀 Quick Start (5 minutes)
-
-### 1. Create Telegram Bot
 
 ```bash
 # Open Telegram, search @BotFather
@@ -127,16 +158,6 @@ python main.py bot
    ```bash
    python main.py bot
    ```
-
-## 🎮 Commands
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Welcome message & instructions |
-| `/today` | Get today's RC passage and questions |
-| `/answer` | View answers with detailed explanations |
-| `/help` | Show all commands |
-| `/stats` | Practice statistics (coming soon) |
 
 ## 🌐 Free Hosting Options
 
@@ -285,29 +306,44 @@ All configuration via environment variables (no code changes needed):
 | `TELEGRAM_TOKEN` | Bot authentication | ✅ Yes |
 | `HF_API_TOKEN` | HuggingFace API access | ❌ No (uses fallback) |
 | `TELEGRAM_CHAT_ID` | For scheduled sends | ❌ No |
+| `ADMIN_USER_IDS` | Comma-separated admin user IDs | ❌ No |
 | `DAILY_SEND_TIME` | Send time (HH:MM UTC) | ❌ No (08:00 default) |
 | `TIMEZONE` | Timezone for sends | ❌ No (UTC default) |
 | `DEBUG_MODE` | Enable debug logging | ❌ No |
 
+### Getting Admin User ID
+
+To set yourself as an admin:
+1. Start the bot and send `/start`
+2. Check the bot's console output (if running locally)
+3. Look for your user ID
+4. Add to `.env`: `ADMIN_USER_IDS=your_user_id`
+5. Now you can use `/adminstats` command
+
 ## 🎓 Passage Quality
 
-### CAT 2024 / GMAT 700+ Level
+Passages are tailored to your chosen difficulty level:
 
-**Features:**
+### GMAT 700+ Level
 - 420-520 word passages
-- Dense academic prose
-- Complex sentence structure
+- Dense academic prose with complex structures
 - Implicit author stance
-- Ambiguous transitions
+- Ambiguous transitions requiring inference
 - Logical tensions between ideas
 
-**Topics (rotates daily):**
-1. Philosophy
-2. Political Theory
-3. Behavioral Economics
-4. Cognitive Science
-5. Sociology
-6. History of Ideas
+### CAT Advanced Level
+- 380-480 word passages
+- Moderately complex academic content
+- Somewhat implicit author perspective
+- Balanced structure with clear paragraphs
+- Mix of direct and implicit meanings
+
+### SBI/IBPS PO Level
+- 250-350 word passages
+- Clear, business/HR focused topics
+- Explicit meanings and direct language
+- Practical examples and case studies
+- Easy to moderate comprehension level
 
 ### Question Types
 
@@ -316,15 +352,31 @@ All configuration via environment variables (no code changes needed):
 3. **Tone/Attitude** - Recognize author's stance
 4. **Logical Implication** - Reason about consequences
 
-## 📊 Usage Statistics
+## 📊 User Analytics & Statistics
 
-The bot tracks:
-- RC attempts per user
-- Accuracy rates
-- Topics completed
-- Difficulty progression
+### Personal Statistics (`/mystats`)
+- Total RC passages attempted
+- Current practice streak (days)
+- Days you've been active
+- Difficulty level preferences
+- Progress over time
 
-(Statistics feature coming soon)
+### Admin Dashboard (`/adminstats`)
+**[Requires Admin Access]**
+- Total registered users
+- Daily active users
+- Total practice interactions
+- Top 5 most active users by RC count
+- Generated timestamp
+
+### Data Tracking
+The bot automatically tracks:
+- User ID and name
+- First seen and last seen timestamps
+- Total RC attempts
+- Difficulty preferences
+- Streak and practice dates
+- All activity logged in `data/analytics.jsonl`
 
 ## 🤝 Contributing
 
