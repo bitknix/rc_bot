@@ -67,7 +67,17 @@ DAILY_SEND_TIME = "08:00"  # 8 AM in the user's timezone (HH:MM format in UTC)
 TIMEZONE = "UTC"
 
 # Admin access
-ADMIN_USER_IDS = list(map(int, os.getenv("ADMIN_USER_IDS", "").split(","))) if os.getenv("ADMIN_USER_IDS") else []
+admin_ids_str = os.getenv("ADMIN_USER_IDS", "").strip()
+if admin_ids_str:
+    try:
+        ADMIN_USER_IDS = [int(uid.strip()) for uid in admin_ids_str.split(",") if uid.strip()]
+    except ValueError:
+        ADMIN_USER_IDS = []
+        print("[WARN] Invalid ADMIN_USER_IDS format. Expected: comma-separated numbers")
+else:
+    ADMIN_USER_IDS = []
+
+print(f"[INFO] Admin users loaded: {ADMIN_USER_IDS}")
 
 # Logging
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"

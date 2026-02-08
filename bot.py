@@ -168,7 +168,10 @@ class RCBot:
 
     def _is_admin(self, user_id: int) -> bool:
         """Check if user is admin."""
-        return user_id in ADMIN_USER_IDS
+        is_admin = user_id in ADMIN_USER_IDS
+        if DEBUG_MODE:
+            print(f"[DEBUG] Admin check - User: {user_id}, Admin IDs: {ADMIN_USER_IDS}, Result: {is_admin}")
+        return is_admin
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command."""
@@ -203,31 +206,33 @@ Welcome to your elite reading comprehension training platform! Choose your diffi
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /help command."""
-        help_text = """
-📚 *RC Bot Commands:*
+        help_text = """📚 RC Bot Commands
 
-*Practice:*
+PRACTICE:
 /today - Get today's RC passage
 /answer - View answers with detailed explanations
 /difficulty - Select difficulty level
 /quiz - Practice 3 passages in a row
 
-*Statistics:*
+YOUR STATISTICS:
 /streak - View your practice streak
 /mystats - Your personal statistics
 
-*Others:*
+ADMIN ONLY:
+/verify_admin - Check if you have admin access
+/adminstats - View overall analytics dashboard
+
+OTHERS:
 /feedback - Send feedback
 /help - This message
 
-💡 *Difficulty Levels:*
-🔥 *GMAT 700+* - Ultra-dense abstract prose, implicit author stance
-🟡 *CAT Advanced* - Dense academic content, moderate complexity
-🟢 *SBI/IBPS PO* - Clear structure, business/HR focused
+DIFFICULTY LEVELS:
+🔥 GMAT 700+ - Ultra-dense abstract prose
+🟡 CAT Advanced - Dense academic content
+🟢 SBI/IBPS PO - Clear structure
 
-Happy practicing! 🎯
-        """
-        await update.message.reply_text(help_text, parse_mode="Markdown")
+Happy practicing! 🎯"""
+        await update.message.reply_text(help_text)
 
     async def set_difficulty(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /difficulty command - let user choose difficulty level."""
@@ -270,7 +275,7 @@ Happy practicing! 🎯
         )
 
     async def answer_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle answer button clicks."""
+        """Handle answer button clicks - provide immediate feedback."""
         query = update.callback_query
         data = query.data  # Format: "ans_<question_number>_<answer>"
 
@@ -280,7 +285,7 @@ Happy practicing! 🎯
             user_answer = parts[2]
 
             if not self.current_rc:
-                await query.answer("Please use /today first to get RC")
+                await query.answer("Please use /today first to get RC", show_alert=True)
                 return
 
             questions = self.current_rc["questions"]
@@ -295,11 +300,13 @@ Happy practicing! 🎯
             is_correct = user_answer == correct_answer
 
             if is_correct:
-                response = f"✅ Correct! {user_answer} is the right answer!"
-                await query.answer(response, show_alert=False)
+                # Show checkmark for correct answer
+                response = f"✅ CORRECT! {user_answer} is the right answer!"
+                await query.answer(response, show_alert=False)  # Small notification
             else:
-                response = f"❌ Wrong! Your answer: {user_answer}\n✅ Correct answer: {correct_answer}"
-                await query.answer(response, show_alert=True)
+                # Show what they got wrong
+                response = f"❌ Wrong!\n\nYour Answer: {user_answer}\n✅ Correct Answer: {correct_answer}\n\nRead the explanation above to understand why."
+                await query.answer(response, show_alert=True)  # Large popup
 
         except Exception as e:
             await query.answer(f"Error: {str(e)}", show_alert=True)
@@ -380,7 +387,7 @@ Happy practicing! 🎯
         """
         await update.message.reply_text(passage_msg, parse_mode="Markdown")
 
-        # Send each question
+        # Send each question with answer buttons
         for i, q in enumerate(questions, 1):
             question_msg = f"""
 *Q{i}. {q['type'].upper()}*
@@ -388,13 +395,29 @@ Happy practicing! 🎯
 {q['question']}
 
 {chr(10).join(q['options'])}
-
-💭 *Take your time. Use /answer to see correct answer.*
             """
             await update.message.reply_text(question_msg, parse_mode="Markdown")
 
+            # Create 2x2 answer button layout
+            answer_keys = ['A', 'B', 'C', 'D']
+            keyboard = []
+            for j in range(0, 4, 2):
+                row = []
+                for k in range(2):
+                    if j + k < 4:
+                        key = answer_keys[j + k]
+                        row.append(InlineKeyboardButton(
+                            key,
+                            callback_data=f"ans_{q['number']}_{key}"
+                        ))
+                if row:
+                    keyboard.append(row)
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("*Select your answer:*", reply_markup=reply_markup, parse_mode="Markdown")
+
     async def show_answers(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /answer command - show answers and explanations with clickable buttons."""
+        """Handle /answer command - show answers with explanations."""
         if not self.current_rc:
             await update.message.reply_text("No RC loaded. Use /today first to generate today's RC.")
             return
@@ -403,82 +426,53 @@ Happy practicing! 🎯
         topic = self.current_rc["topic"]
 
         # Header
-        header = f"""
-✅ *ANSWERS & EXPLANATIONS*
+        header = f"""✅ *ANSWERS & EXPLANATIONS*
 
 📌 *Topic:* {topic}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        """
+Review the correct answers and detailed explanations below.
+
+"""
         await update.message.reply_text(header, parse_mode="Markdown")
 
-        # Each question's answer with buttons
+        # Each question
         for q in questions:
             # Question header
-            question_header = f"""
-*Q{q['number']}. {q['type'].upper()}*
-
-{q['question']}
-
-*Options:*
-            """
+            question_header = f"*Q{q['number']}. {q['type'].upper()}*\n\n{q['question']}"
             await update.message.reply_text(question_header, parse_mode="Markdown")
 
-            # Show all options
-            for i, opt in enumerate(q['options']):
-                await update.message.reply_text(opt, parse_mode="Markdown")
-
-            # Create answer buttons (2x2 layout)
-            answer_keys = ['A', 'B', 'C', 'D']
-            keyboard = []
-
-            for i in range(0, 4, 2):
-                row = []
-                for j in range(2):
-                    if i + j < len(answer_keys):
-                        key = answer_keys[i + j]
-                        is_correct = "✅ " if key == q['correct_answer'] else ""
-                        button_text = f"{is_correct}{key}"
-                        row.append(InlineKeyboardButton(button_text, callback_data=f"ans_{q['number']}_{key}"))
-                if row:
-                    keyboard.append(row)
-
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            # Send with buttons
-            buttons_msg = "*Click your answer below:*"
-            await update.message.reply_text(buttons_msg, reply_markup=reply_markup, parse_mode="Markdown")
+            # Show all options for reference
+            options_text = "*Options:*\n"
+            for opt in q['options']:
+                options_text += f"{opt}\n"
+            await update.message.reply_text(options_text, parse_mode="Markdown")
 
             # Show explanation
-            explanation_msg = f"""
-✅ *Correct Answer: {q['correct_answer']}*
+            correct_key = q['correct_answer']
+            explanation_text = f"""✅ *Correct Answer: {correct_key}*
 
 *Why this is correct:*
 {q['explanation']['correct']}
 
-*Why other options are wrong:*
-{q['correct_answer']} ≠ A: {q['explanation']['A'] if q['correct_answer'] != 'A' else q['explanation']['B']}
+*Why other options fail:*
 
-{q['correct_answer']} ≠ B: {q['explanation']['B'] if q['correct_answer'] != 'B' else q['explanation']['C']}
+❌ {correct_key} ≠ A: {q['explanation']['A'] if correct_key != 'A' else q['explanation']['B']}
 
-{q['correct_answer']} ≠ C: {q['explanation']['C'] if q['correct_answer'] != 'C' else q['explanation']['D']}
+❌ {correct_key} ≠ B: {q['explanation']['B'] if correct_key != 'B' else q['explanation']['C']}
 
-{q['correct_answer']} ≠ D: {q['explanation']['D'] if q['correct_answer'] != 'D' else q['explanation']['A']}
+❌ {correct_key} ≠ C: {q['explanation']['C'] if correct_key != 'C' else q['explanation']['D']}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """
-            await update.message.reply_text(explanation_msg, parse_mode="Markdown")
+❌ {correct_key} ≠ D: {q['explanation']['D'] if correct_key != 'D' else q['explanation']['A']}
+"""
+            await update.message.reply_text(explanation_text, parse_mode="Markdown")
 
-        # Summary message
-        summary = """
-*🎓 How to Review:*
-1. Click the buttons to check your answers
-2. Read the explanations for questions you missed
-3. Understand WHY the answer is correct, not just WHAT it is
-4. Notice patterns in your mistakes
+        # Summary
+        summary = """*🎓 Learning Tips:*
+• Review question types and strategies
+• Read explanations carefully
+• Try to understand the reasoning, not just memorize
 
-Come back tomorrow for a new challenge! 🚀
-        """
+See you tomorrow! 🚀"""
         await update.message.reply_text(summary, parse_mode="Markdown")
 
     async def streak_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
